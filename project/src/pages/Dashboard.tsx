@@ -1,216 +1,284 @@
-import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Users, Activity, Shield, Factory } from 'lucide-react';
 import {
-  LayoutDashboard, Users, Layers, Radio, CalendarCheck,
-  ClipboardList, Shield, TrendingDown, BarChart2, Zap,
-  BookOpen, CheckSquare, X, ChevronLeft, ChevronRight
-} from 'lucide-react';
+  AreaChart, Area, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
+import { dashboardApi } from '../api/services';
+import { dummyManpowerTrend, dummyLevelComparison } from '../data/dummy';
 
-import fullLogo from '../../public/logo.png';
-import smallLogo from '../../public/logo-.png';
-
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/employees', icon: Users, label: 'Employees' },
-  { to: '/levels', icon: Layers, label: 'Levels' },
-  { to: '/stations', icon: Radio, label: 'Stations' },
-  { to: '/attendance', icon: CalendarCheck, label: 'Attendance' },
-  { to: '/manpower', icon: ClipboardList, label: 'Manpower Req.' },
-  { to: '/buffer', icon: Shield, label: 'Buffer Manpower' },
-  { to: '/attrition', icon: TrendingDown, label: 'Attrition' },
-  { to: '/reports', icon: BarChart2, label: 'Reports' },
-  { label: 'Analytics', divider: true },
-  { to: '/skill-matrix', icon: Zap, label: 'Skill Matrix' },
-  { to: '/training', icon: BookOpen, label: 'Training' },
-  { to: '/action-plans', icon: CheckSquare, label: 'Action Plans' },
-];
-
-interface Props {
-  open: boolean;
-  onClose: () => void;
-  collapsed?: boolean;
-  onToggleCollapse?: () => void;
+interface DashboardData {
+  total_ctq_stations: number;
+  operators_required: number;
+  operators_available: number;
+  buffer_required: number;
+  buffer_available: number;
+  l1_required: number;
+  l1_available: number;
+  l2_required: number;
+  l2_available: number;
+  l3_required: number;
+  l3_available: number;
+  l4_required: number;
+  l4_available: number;
 }
 
-export default function Sidebar({ open, onClose, collapsed = false, onToggleCollapse }: Props) {
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+interface KPICardProps {
+  title: string;
+  value: string | number;
+  icon: React.ReactNode;
+  iconBg: string;
+  valueColor?: string;
+}
+
+function KPICard({ title, value, icon, iconBg, valueColor = 'text-gray-900 dark:text-gray-100' }: KPICardProps) {
   return (
-    <>
-      {/* Mobile overlay */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/40 z-20 lg:hidden"
-          onClick={onClose}
+    <div className="bg-white dark:bg-gray-900 rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100 dark:border-gray-800">
+      <div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-0.5">{title}</p>
+        <p className={`text-2xl font-bold ${valueColor}`}>{value}</p>
+      </div>
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${iconBg}`}>
+        {icon}
+      </div>
+    </div>
+  );
+}
+
+interface LevelBoxProps {
+  label: string;
+  value: string | number;
+}
+
+function LevelBox({ label, value }: LevelBoxProps) {
+  return (
+    <div className="flex flex-col items-center justify-center border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 py-1.5 px-1">
+      <span className="text-base font-bold text-gray-800 dark:text-gray-100">{value}</span>
+      <span className="text-[10px] text-gray-500 dark:text-gray-400 text-center leading-tight">{label}</span>
+    </div>
+  );
+}
+
+interface SectionCardProps {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  className?: string;
+  headerExtra?: React.ReactNode;
+}
+
+function SectionCard({ title, subtitle, children, className = '', headerExtra }: SectionCardProps) {
+  return (
+    <div className={`bg-white dark:bg-gray-900 rounded-xl p-3 shadow-sm border border-gray-100 dark:border-gray-800 ${className}`}>
+      <div className="flex items-start justify-between mb-0.5">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</h3>
+          {subtitle && <p className="text-xs text-gray-400 dark:text-gray-500">{subtitle}</p>}
+        </div>
+        {headerExtra}
+      </div>
+      <div className="mt-1">{children}</div>
+    </div>
+  );
+}
+
+// ── Custom dot for charts ─────────────────────────────────────────────────────
+const DotWithStroke = (props: any) => {
+  const { cx, cy, stroke } = props;
+  return <circle cx={cx} cy={cy} r={4} fill="white" stroke={stroke} strokeWidth={2} />;
+};
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+export default function Dashboard() {
+  const [kpi, setKpi] = useState<DashboardData | null>(null);
+  const [attrition, setAttrition] = useState<unknown[]>([]);
+  const [absenteeism, setAbsenteeism] = useState<unknown[]>([]);
+
+  useEffect(() => {
+    dashboardApi.get().then(setKpi);
+    dashboardApi.attritionTrend().then((d) => setAttrition(Array.isArray(d) ? d : []));
+    dashboardApi.absenteeism().then((d) => setAbsenteeism(Array.isArray(d) ? d : []));
+  }, []);
+
+  const levelBoxes = [
+    { label: 'L1 Required', value: kpi?.l1_required ?? '25' },
+    { label: 'L1 Available', value: kpi?.l1_available ?? '23' },
+    { label: 'L2 Required', value: kpi?.l2_required ?? '25' },
+    { label: 'L2 Available', value: kpi?.l2_available ?? '24' },
+    { label: 'L3 Required', value: kpi?.l3_required ?? '25' },
+    { label: 'L3 Available', value: kpi?.l3_available ?? '25' },
+    { label: 'L4 Required', value: kpi?.l4_required ?? '25' },
+    { label: 'L4 Available', value: kpi?.l4_available ?? '25' },
+  ];
+
+  const pctFormatter = (v: number) => `${v}%`;
+
+  return (
+    <div className="space-y-3 p-3 bg-gray-50 dark:bg-gray-950 min-h-screen transition-colors">
+
+      {/* ── Row 1: 4 KPI cards — 2 cols on mobile, 4 on sm+ ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <KPICard
+          title="CTQ Stations"
+          value={kpi?.total_ctq_stations ?? '—'}
+          icon={<Factory size={18} className="text-blue-500" />}
+          iconBg="bg-blue-100"
         />
-      )}
-
-      {/* ── DESKTOP ── */}
-      <div
-        className={`relative flex-shrink-0 hidden lg:block
-          transition-[width] duration-300 ease-in-out
-          ${collapsed ? 'w-[68px]' : 'w-64'}`}
-      >
-        <aside
-          className={`fixed top-0 left-0 h-full
-            bg-gradient-to-b from-[#071833] via-[#06334b] to-[#045a4f]
-            z-30 flex flex-col shadow-2xl
-            will-change-transform
-            transition-[width,transform] duration-300 ease-in-out
-            ${collapsed ? 'w-[68px]' : 'w-64'}`}
-        >
-          {/* Header */}
-          <div className="relative flex items-center justify-center px-3 border-b border-cyan-900/60 min-h-[72px] overflow-hidden">
-
-            {/* Full logo — slides/fades out when collapsed */}
-            <div
-              className={`transition-[opacity,width] duration-300 ease-in-out overflow-hidden
-                ${collapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}
-            >
-              <img
-                src={fullLogo}
-                alt="TechnoViz Automation"
-                className="h-10 w-auto object-contain"
-              />
-            </div>
-
-            {/* Small icon logo — fades in when collapsed */}
-            <div
-              className={`absolute left-1/2 -translate-x-1/2
-                transition-opacity duration-300 ease-in-out
-                ${collapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-            >
-              <img
-                src={smallLogo}
-                alt="Logo"
-                className="h-9 w-9 object-contain"
-              />
-            </div>
-          </div>
-
-          {/* Nav */}
-          <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden hide-scrollbar">
-            {navItems.map(({ to, icon: Icon, label, divider }: any) => {
-              if (divider) {
-                return collapsed ? (
-                  <div
-                    key={label}
-                    className="mx-3 my-3 border-t border-cyan-900/50"
-                  />
-                ) : (
-                  <div
-                    key={label}
-                    className="px-6 py-3 mt-4 mb-2 text-xs font-semibold text-emerald-200/80 uppercase tracking-wider whitespace-nowrap"
-                  >
-                    {label}
-                  </div>
-                );
-              }
-
-              return (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={to === '/'}
-                  title={collapsed ? label : undefined}
-                  className={({ isActive }) =>
-                    `flex items-center text-sm
-  transition-colors duration-150 rounded-lg mb-0.5
-  ${collapsed ? 'gap-1 justify-center w-10 h-10 mx-auto p-0' : 'gap-3 mx-2 px-4 py-3'}
-  ${isActive
-                      ? 'bg-slate-200/15 text-white font-semibold'
-                      : 'text-emerald-100 hover:bg-slate-200/10 hover:text-white'
-                    }`
-                  }
-                >
-                  <Icon size={18} className="flex-shrink-0" />
-                  <span
-                    className={`whitespace-nowrap overflow-hidden
-                      transition-[width,opacity] duration-300 ease-in-out
-                      ${collapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}
-                  >
-                    {label}
-                  </span>
-                </NavLink>
-              );
-            })}
-          </nav>
-        </aside>
-
-        {/* Collapse toggle — floats on right edge of sidebar */}
-        <button
-          onClick={onToggleCollapse}
-          className="absolute top-5 -right-3 z-40
-            hidden lg:flex items-center justify-center
-            w-6 h-6 rounded-full
-            bg-[#06334b] border border-cyan-700
-            text-emerald-200 hover:text-white hover:bg-cyan-700
-            shadow-md transition-colors duration-150"
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
-        </button>
+        <KPICard
+          title="Operators Required"
+          value={kpi?.operators_required ?? '—'}
+          icon={<Users size={18} className="text-gray-500" />}
+          iconBg="bg-gray-100"
+        />
+        <KPICard
+          title="Operators Available"
+          value={kpi?.operators_available ?? '—'}
+          icon={<Activity size={18} className="text-teal-500" />}
+          iconBg="bg-teal-50"
+          valueColor="text-teal-500"
+        />
+        <KPICard
+          title="Buffer Req. / Avail."
+          value={kpi ? `${kpi.buffer_required} / ${kpi.buffer_available}` : '—'}
+          icon={<Shield size={18} className="text-orange-500" />}
+          iconBg="bg-orange-50"
+          valueColor="text-orange-500"
+        />
       </div>
 
-      {/* ── MOBILE ── */}
-      <aside
-        className={`fixed top-0 left-0 h-full w-64
-          bg-gradient-to-b from-[#071833] via-[#06334b] to-[#045a4f]
-          z-30 flex flex-col shadow-2xl lg:hidden
-          will-change-transform
-          transition-transform duration-300 ease-in-out
-          ${open ? 'translate-x-0' : '-translate-x-full'}`}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 py-4 border-b border-cyan-900/60 min-h-[72px]">
-          <img
-            src={fullLogo}
-            alt="TechnoViz Automation"
-            className="h-10 w-auto object-contain"
-          />
-          <button
-            onClick={onClose}
-            className="flex items-center justify-center w-7 h-7 rounded-md
-              text-emerald-200 hover:text-white hover:bg-white/10
-              transition-colors duration-150 flex-shrink-0"
-          >
-            <X size={18} />
-          </button>
+      {/* ── Row 2: Manpower chart (left) + Level panel (right) ── */}
+      {/* Stacks vertically on mobile, side-by-side on lg+ */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch">
+
+        {/* Manpower Utilization Trend */}
+        <SectionCard
+          className="lg:col-span-3"
+          title="Manpower Utilization Trend"
+          subtitle="Comparing required vs. actual headcount over time"
+          headerExtra={
+            <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-3 h-0.5 bg-blue-500 rounded" />
+                Required
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-3 h-0.5 bg-green-500 rounded" />
+                Available
+              </span>
+            </div>
+          }
+        >
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={dummyManpowerTrend} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradRequired" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.03} />
+                </linearGradient>
+                <linearGradient id="gradAvailable" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} domain={[0, 120]} ticks={[0, 20, 40, 60, 80, 100, 120]} />
+              <Tooltip
+                contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 12 }}
+                cursor={{ stroke: '#e5e7eb', strokeWidth: 1 }}
+              />
+              <Area type="monotone" dataKey="required" stroke="#3b82f6" strokeWidth={2} fill="url(#gradRequired)" dot={<DotWithStroke stroke="#3b82f6" />} activeDot={{ r: 5 }} name="Required" />
+              <Area type="monotone" dataKey="available" stroke="#10b981" strokeWidth={2} fill="url(#gradAvailable)" dot={<DotWithStroke stroke="#10b981" />} activeDot={{ r: 5 }} name="Available" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </SectionCard>
+
+        {/* Operators Required vs Available */}
+        <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl p-3 shadow-sm border border-gray-100 dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 text-center mb-1.5">
+            Operators Required vs Available
+          </h3>
+          {/* 4 cols on mobile (pairs side by side), 2 cols on lg */}
+          <div className="grid grid-cols-4 lg:grid-cols-2 gap-1.5">
+            {levelBoxes.map(({ label, value }) => (
+              <LevelBox key={label} label={label} value={value} />
+            ))}
+          </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden hide-scrollbar">
-          {navItems.map(({ to, icon: Icon, label, divider }: any) => {
-            if (divider) {
-              return (
-                <div
-                  key={label}
-                  className="px-6 py-3 mt-4 mb-2 text-xs font-semibold text-emerald-200/80 uppercase tracking-wider"
-                >
-                  {label}
-                </div>
-              );
-            }
-            return (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 text-sm
-                  transition-colors duration-150
-                  mx-2 rounded-lg mb-0.5
-                  ${isActive
-                    ? 'bg-slate-200/15 text-white font-semibold'
-                    : 'text-emerald-100 hover:bg-slate-200/10 hover:text-white'
-                  }`
-                }
-              >
-                <Icon size={18} className="flex-shrink-0" />
-                <span>{label}</span>
-              </NavLink>
-            );
-          })}
-        </nav>
-      </aside>
-    </>
+      </div>
+
+      {/* ── Row 3: Attrition + Absenteeism + Level Breakdown ── */}
+      {/* 1 col on mobile, 2 cols on md, 3 cols on lg */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+
+        {/* Attrition Trend */}
+        <SectionCard title="Attrition Trend" subtitle="Monthly attrition rate (%)">
+          <ResponsiveContainer width="100%" height={140}>
+            <AreaChart data={attrition} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradAttrition" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={pctFormatter} domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} />
+              <Tooltip
+                contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 11 }}
+                formatter={(v) => [`${Number(v ?? 0)}%`, 'Attrition']}
+              />
+              <Area type="monotone" dataKey="rate" stroke="#6366f1" strokeWidth={2} fill="url(#gradAttrition)" dot={<DotWithStroke stroke="#6366f1" />} activeDot={{ r: 4 }} name="Rate" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </SectionCard>
+
+        {/* Absenteeism Trend */}
+        <SectionCard title="Absenteeism Trend" subtitle="Monthly absenteeism rate (%)">
+          <ResponsiveContainer width="100%" height={140}>
+            <AreaChart data={absenteeism} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradAbsent" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={pctFormatter} domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} />
+              <Tooltip
+                contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 11 }}
+                formatter={(v) => [`${Number(v ?? 0)}%`, 'Absenteeism']}
+              />
+              <Area type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} fill="url(#gradAbsent)" dot={<DotWithStroke stroke="#10b981" />} activeDot={{ r: 4 }} name="Rate" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </SectionCard>
+
+        {/* Level Breakdown — spans full width on md (2-col row), normal on lg */}
+        <SectionCard
+          title="Level Breakdown"
+          subtitle="Distribution of operators by skill level"
+          className="md:col-span-2 lg:col-span-1"
+        >
+          <ResponsiveContainer width="100%" height={140}>
+            <BarChart data={dummyLevelComparison} margin={{ top: 16, right: 8, left: -10, bottom: 0 }} barSize={16}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <XAxis dataKey="level" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} domain={[0, 40]} ticks={[0, 10, 20, 30, 40]} />
+              <Tooltip
+                contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 11 }}
+              />
+              <Bar dataKey="required" name="Required" fill="#93c5fd" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="available" name="Available" fill="#6ee7b7" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </SectionCard>
+
+      </div>
+    </div>
   );
 }
