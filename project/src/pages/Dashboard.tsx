@@ -47,16 +47,44 @@ function KPICard({ title, value, icon, iconBg, valueColor = 'text-gray-900 dark:
   );
 }
 
+// ── Level Box — compact, same height as original but styled ──────────────────
 interface LevelBoxProps {
   label: string;
   value: string | number;
+  type: 'required' | 'available';
 }
 
-function LevelBox({ label, value }: LevelBoxProps) {
+function LevelBox({ label, value, type }: LevelBoxProps) {
+  const isRequired = type === 'required';
+
   return (
-    <div className="flex flex-col items-center justify-center border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 py-1.5 px-1">
-      <span className="text-base font-bold text-gray-800 dark:text-gray-100">{value}</span>
-      <span className="text-[10px] text-gray-500 dark:text-gray-400 text-center leading-tight">{label}</span>
+    <div
+      className={`
+        relative flex flex-col items-center justify-center rounded-lg py-1.5 px-1 overflow-hidden
+        border transition-all duration-200 hover:shadow-md cursor-default
+        ${isRequired
+          ? 'bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/40 dark:to-gray-900 border-blue-100 dark:border-blue-900'
+          : 'bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-gray-900 border-emerald-100 dark:border-emerald-900'
+        }
+      `}
+    >
+      {/* Colored top accent bar */}
+      <div className={`absolute top-0 left-0 right-0 h-0.5 ${isRequired ? 'bg-blue-400' : 'bg-emerald-400'}`} />
+
+      {/* Value */}
+      <span className={`text-base font-extrabold tracking-tight leading-none ${isRequired ? 'text-blue-600 dark:text-blue-400' : 'text-emerald-600 dark:text-emerald-400'
+        }`}>
+        {value}
+      </span>
+
+      {/* Label */}
+      <span className="text-[10px] text-gray-500 dark:text-gray-400 text-center leading-tight mt-0.5">
+        {label}
+      </span>
+
+      {/* Subtle bg decoration */}
+      <div className={`absolute -bottom-2 -right-2 w-7 h-7 rounded-full opacity-10 ${isRequired ? 'bg-blue-400' : 'bg-emerald-400'
+        }`} />
     </div>
   );
 }
@@ -102,15 +130,15 @@ export default function Dashboard() {
     dashboardApi.absenteeism().then((d) => setAbsenteeism(Array.isArray(d) ? d : []));
   }, []);
 
-  const levelBoxes = [
-    { label: 'L1 Required', value: kpi?.l1_required ?? '25' },
-    { label: 'L1 Available', value: kpi?.l1_available ?? '23' },
-    { label: 'L2 Required', value: kpi?.l2_required ?? '25' },
-    { label: 'L2 Available', value: kpi?.l2_available ?? '24' },
-    { label: 'L3 Required', value: kpi?.l3_required ?? '25' },
-    { label: 'L3 Available', value: kpi?.l3_available ?? '25' },
-    { label: 'L4 Required', value: kpi?.l4_required ?? '25' },
-    { label: 'L4 Available', value: kpi?.l4_available ?? '25' },
+  const levelBoxes: { label: string; value: string | number; type: 'required' | 'available' }[] = [
+    { label: 'L1 Required', value: kpi?.l1_required ?? '25', type: 'required' },
+    { label: 'L1 Available', value: kpi?.l1_available ?? '23', type: 'available' },
+    { label: 'L2 Required', value: kpi?.l2_required ?? '25', type: 'required' },
+    { label: 'L2 Available', value: kpi?.l2_available ?? '24', type: 'available' },
+    { label: 'L3 Required', value: kpi?.l3_required ?? '25', type: 'required' },
+    { label: 'L3 Available', value: kpi?.l3_available ?? '25', type: 'available' },
+    { label: 'L4 Required', value: kpi?.l4_required ?? '25', type: 'required' },
+    { label: 'L4 Available', value: kpi?.l4_available ?? '25', type: 'available' },
   ];
 
   const pctFormatter = (v: number) => `${v}%`;
@@ -118,7 +146,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-3 p-3 bg-gray-50 dark:bg-gray-950 min-h-screen transition-colors">
 
-      {/* ── Row 1: 4 KPI cards — 2 cols on mobile, 4 on sm+ ── */}
+      {/* ── Row 1: 4 KPI cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <KPICard
           title="CTQ Stations"
@@ -149,7 +177,6 @@ export default function Dashboard() {
       </div>
 
       {/* ── Row 2: Manpower chart (left) + Level panel (right) ── */}
-      {/* Stacks vertically on mobile, side-by-side on lg+ */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch">
 
         {/* Manpower Utilization Trend */}
@@ -197,13 +224,25 @@ export default function Dashboard() {
 
         {/* Operators Required vs Available */}
         <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl p-3 shadow-sm border border-gray-100 dark:border-gray-800">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 text-center mb-1.5">
-            Operators Required vs Available
-          </h3>
-          {/* 4 cols on mobile (pairs side by side), 2 cols on lg */}
+          {/* Header */}
+          <div className="flex items-center justify-between mb-1.5">
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+              Operators Required vs Available
+            </h3>
+            <div className="flex items-center gap-2 text-[10px] text-gray-400">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-blue-400 inline-block" />Req
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-emerald-400 inline-block" />Avail
+              </span>
+            </div>
+          </div>
+
+          {/* Grid — 4 cols on mobile, 2 cols on lg */}
           <div className="grid grid-cols-4 lg:grid-cols-2 gap-1.5">
-            {levelBoxes.map(({ label, value }) => (
-              <LevelBox key={label} label={label} value={value} />
+            {levelBoxes.map(({ label, value, type }) => (
+              <LevelBox key={label} label={label} value={value} type={type} />
             ))}
           </div>
         </div>
@@ -211,7 +250,6 @@ export default function Dashboard() {
       </div>
 
       {/* ── Row 3: Attrition + Absenteeism + Level Breakdown ── */}
-      {/* 1 col on mobile, 2 cols on md, 3 cols on lg */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
 
         {/* Attrition Trend */}
@@ -258,7 +296,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </SectionCard>
 
-        {/* Level Breakdown — spans full width on md (2-col row), normal on lg */}
+        {/* Level Breakdown */}
         <SectionCard
           title="Level Breakdown"
           subtitle="Distribution of operators by skill level"
